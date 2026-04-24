@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
+import NSE_STOCKS from '../config/nse_stocks.json'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -513,12 +514,19 @@ function FaqItem({ q, a }) {
 }
 
 // ─── Main Component ───
-export default function LandingPage() {
-  const { user, userProfile, signOut } = useAuth()
+export default function AnalysePage() {
+  const { user, userProfile, authLoading, signOut } = useAuth()
   const navigate = useNavigate()
 
+  useEffect(() => {
+    if (!authLoading && !user) navigate('/login', { replace: true })
+  }, [user, authLoading, navigate])
+
+  
   const [inputVal, setInputVal] = useState('')
-  const [result, setResult] = useState(MOCK_DATA.SUZLON)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const searchInputRef = useRef(null)
@@ -568,8 +576,9 @@ export default function LandingPage() {
       if (MOCK_DATA[sym]) {
         // Keep mock result, just show soft note
       } else {
-        setError(`Could not analyse "${sym}". Try RELIANCE, HDFCBANK, INFY, TATASTEEL, or SUZLON.`)
-        setResult(MOCK_DATA.SUZLON)
+        const apiError = err.response?.data?.detail;
+        setError(apiError || `Could not analyse "${sym}". Make sure you entered a valid NSE ticker.`);
+        setResult(null);
       }
     } finally {
       setLoading(false)
@@ -588,6 +597,11 @@ export default function LandingPage() {
     runAnalysis(t)
   }, [runAnalysis])
 
+  
+  const handleBlur = () => {
+    setTimeout(() => setShowSuggestions(false), 200)
+  }
+
   const scrollToSearch = (e) => {
     e.preventDefault()
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -599,54 +613,30 @@ export default function LandingPage() {
       <div className="noise-overlay" />
 
       {/* NAV */}
+      
+      {/* NAV */}
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5" style={{ background: 'rgba(5,6,8,0.8)', backdropFilter: 'blur(20px)' }}>
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-3">
+          <a href="/app" className="flex items-center gap-3">
             <div className="flex items-baseline gap-2">
               <span className="text-[17px] font-semibold tracking-tight text-white">StockX</span>
               <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted px-1.5 py-0.5 border border-line rounded">by Stoxify</span>
             </div>
           </a>
-          <ul className="hidden md:flex items-center gap-8">
-            <li><a href="#features" className="text-[13px] text-soft hover:text-white transition">Features</a></li>
-            <li><a href="#methodology" className="text-[13px] text-soft hover:text-white transition">Methodology</a></li>
-            <li><a href="#try-free" className="text-[13px] text-soft hover:text-white transition">Try Free</a></li>
-          </ul>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <>
-                <button
-                  onClick={handleAnalyseClick}
-                  className="hidden sm:inline-flex items-center gap-2 text-[13px] font-semibold text-ink bg-emerald px-4 py-1.5 rounded-lg hover:bg-emerald/90 transition"
-                >
-                  Analyse Now →
-                </button>
-                <div className="flex items-center gap-2 pl-3 border-l border-white/10">
-                  {photoURL
-                    ? <img src={photoURL} alt={displayName} className="w-7 h-7 rounded-full ring-1 ring-white/20" referrerPolicy="no-referrer" />
-                    : <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[11px] font-semibold text-white">{displayName?.[0]?.toUpperCase() ?? '?'}</div>
-                  }
-                  <span className="hidden md:block text-[13px] text-soft max-w-[100px] truncate">{displayName}</span>
-                </div>
-                <button onClick={handleSignOut} className="text-[12px] text-soft hover:text-white transition px-2 py-1 rounded hover:bg-white/5">
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <>
-                <a href="/login" className="hidden sm:inline text-[13px] text-soft hover:text-white transition">Log in →</a>
-                <a
-                  href="/login"
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald/10 border border-emerald/25 hover:bg-emerald/20 transition"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald pulse-dot" />
-                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-emerald">Get Full Access</span>
-                </a>
-              </>
-            )}
+          <div className="flex items-center gap-4">
+            <span className="text-[13px] text-soft">
+              {userProfile?.display_name || user?.email}
+            </span>
+            <button 
+              onClick={async () => { await signOut(); navigate('/login') }}
+              className="text-[13px] text-soft hover:text-white transition px-3 py-1.5 rounded-full border border-line bg-white/5"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </nav>
+
 
       {/* HERO */}
       <header className="relative pt-36 pb-28 px-6 lg:px-10">
@@ -660,12 +650,12 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-[44px] md:text-[68px] lg:text-[76px] font-semibold tracking-[-0.035em] leading-[1.02] text-white mb-6 fade-up">
-            The analyst that<br />
-            <span className="text-white">never </span><span className="italic font-light text-emerald">sleeps.</span>
+            Decision Quality Engine<br />
+            <span className="text-white">Active</span>
           </h1>
 
           <p className="max-w-2xl mx-auto text-[17px] md:text-[18px] text-soft leading-relaxed mb-12 fade-up">
-            Ask about any NSE stock. Get institutional-grade risk analysis, technical validation, and a Decision Quality Score in seconds. No Bloomberg terminal required.
+            Enter any NSE stock ticker below to run a complete 5-layer ML analysis.
           </p>
 
           {/* Search */}
@@ -678,7 +668,9 @@ export default function LandingPage() {
                 ref={searchInputRef}
                 type="text"
                 value={inputVal}
-                onChange={e => setInputVal(e.target.value.toUpperCase())}
+                onChange={e => { setInputVal(e.target.value.toUpperCase()); setShowSuggestions(true); }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={handleBlur}
                 placeholder="Ask about any stock (e.g., RELIANCE, HDFC)..."
                 autoComplete="off"
                 maxLength={20}
@@ -695,6 +687,21 @@ export default function LandingPage() {
                 }
               </button>
             </div>
+            {showSuggestions && inputVal && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-[#0d1117] border border-line rounded-xl overflow-hidden z-50 shadow-2xl">
+                {NSE_STOCKS.filter(s => s.startsWith(inputVal) && s !== inputVal).slice(0, 5).map(s => (
+                  <div
+                    key={s}
+                    onClick={() => { setInputVal(s); setShowSuggestions(false); handleTicker(s); }}
+                    className="px-5 py-3 hover:bg-white/[0.03] cursor-pointer font-mono text-[14px] text-white border-b border-line/50 last:border-0 flex items-center gap-3"
+                  >
+                    <svg className="w-3.5 h-3.5 text-muted" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    {s}
+                  </div>
+                ))}
+              </div>
+            )}
+    
 
             {/* Preloaded suggestions */}
             <div className="flex items-center justify-center flex-wrap gap-2 mt-5">
@@ -718,64 +725,11 @@ export default function LandingPage() {
             </div>
           )}
 
-          {/* Trust badges */}
-          <div className="flex items-center justify-center flex-wrap gap-3 md:gap-4 mt-12 fade-up">
-            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/60 border border-line">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald pulse-dot" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-soft">Indian Market · Live Data</span>
-            </span>
-            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/60 border border-line">
-              <svg className="w-3 h-3 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-soft">NSE APIs</span>
-            </span>
-            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/60 border border-line">
-              <svg className="w-3 h-3 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-soft">DPIIT Recognised</span>
-            </span>
-            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/60 border border-line">
-              <svg className="w-3 h-3 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-soft">SEBI-Compliant Architecture</span>
-            </span>
           </div>
-          {/* Analyse Now CTA */}
-          <div className="mt-10 fade-up">
-            <button
-              onClick={handleAnalyseClick}
-              className="inline-flex items-center gap-3 px-7 py-3.5 rounded-2xl bg-emerald text-ink font-semibold text-[15px] hover:bg-emerald/90 hover:scale-[1.02] active:scale-[0.99] transition-all shadow-[0_0_32px_-8px_rgba(16,185,129,0.5)]"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              {user ? 'Open Full Analysis Engine →' : 'Get Full Access — Sign In Free →'}
-            </button>
-            {!user && (
-              <p className="text-[12px] text-muted mt-3">No card required · Google sign-in · Takes 30 seconds</p>
-            )}
-          </div>
-        </div>
       </header>
 
       {/* RESULT CARD */}
       <section className="relative px-6 lg:px-10 -mt-8 mb-28">
-        {/* Trial mode banner */}
-        <div className="max-w-4xl mx-auto mb-3">
-          <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-warn/8 border border-warn/20">
-            <div className="flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-warn flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
-              </svg>
-              <span className="font-mono text-[11px] text-warn uppercase tracking-[0.1em]">Trial Mode · Demo data only</span>
-              <span className="hidden sm:inline font-mono text-[11px] text-muted">— Sign in for live NSE analysis with all 5 AI layers</span>
-            </div>
-            <button
-              onClick={handleAnalyseClick}
-              className="text-[11px] font-semibold text-emerald hover:text-emerald/80 transition whitespace-nowrap"
-            >
-              {user ? 'Go to Full Engine →' : 'Sign in free →'}
-            </button>
-          </div>
-        </div>
-
         <div ref={resultCardRef} className="max-w-4xl mx-auto space-y-4">
           {result && <ResultCard result={result} loading={loading} />}
           {result && !loading && (
@@ -807,309 +761,16 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* ENGINE GRID */}
-      <section id="features" className="px-6 lg:px-10 py-24">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mb-16 fade-up">
-            <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-emerald mb-4">The Engine</div>
-            <h2 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.03em] leading-[1.05] text-white mb-5">
-              Five analytical dimensions.<br />
-              <span className="text-muted">One simple score.</span>
-            </h2>
-            <p className="text-[16px] text-soft leading-relaxed">
-              Each dimension runs independently against your query. Together they produce a single Decision Quality Score — with a plain-English explanation.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              {
-                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />,
-                num: '01', title: 'Signal Intelligence',
-                desc: 'Aggregates momentum, trend, and volatility indicators into a single setup quality score.',
-              },
-              {
-                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3zm12-3c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3z" />,
-                num: '02', title: 'Risk Simulation',
-                desc: 'Runs thousands of probabilistic price paths to give the mathematical odds of hitting your target vs. stop loss.',
-              },
-              {
-                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 19.07A10 10 0 1119.07 4.93 10 10 0 014.93 19.07z" />,
-                num: '03', title: 'Manipulation Detector',
-                desc: 'Scans for abnormal volume spikes and delivery patterns to flag coordinated pump-and-dump traps before you enter.',
-              },
-              {
-                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.5M12 18h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
-                num: '04', title: 'Sentiment Reality Check',
-                desc: 'Cross-references financial media sentiment against actual price action to catch distribution traps.',
-              },
-              {
-                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 11a4 4 0 11-8 0 4 4 0 018 0z" />,
-                num: '05', title: 'Behavioural Risk Guard',
-                desc: 'Flags self-sabotaging setups like late entries, chasing breakouts, or severe FOMO buying.',
-              },
-            ].map(({ icon, num, title, desc }) => (
-              <div key={num} className="group relative p-6 rounded-2xl border border-line bg-card/40 hover:bg-card/80 hover:border-line2 transition fade-up">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald/10 border border-emerald/25 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-emerald" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">{icon}</svg>
-                  </div>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">Dimension {num}</span>
-                </div>
-                <h3 className="text-[18px] font-semibold text-white mb-2">{title}</h3>
-                <p className="text-[14px] text-soft leading-relaxed">{desc}</p>
-              </div>
-            ))}
-
-            {/* Output card */}
-            <div className="group relative p-6 rounded-2xl border border-emerald/20 bg-gradient-to-br from-emerald/10 via-emerald/5 to-transparent fade-up">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-xl bg-emerald text-ink flex items-center justify-center">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-emerald">The Output</span>
-              </div>
-              <h3 className="text-[18px] font-semibold text-white mb-2">Decision Quality Score</h3>
-              <p className="text-[14px] text-soft leading-relaxed mb-4">A single 0–100 number with plain-English reasoning. You keep the decision. We audit the logic.</p>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-soft">Output latency</span>
-                <span className="font-mono text-[11px] text-emerald">&lt; 5 seconds</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* DATA & TRUST */}
-      <section id="methodology" className="px-6 lg:px-10 py-24 border-y border-line" style={{ background: 'linear-gradient(to bottom, rgba(11,13,16,0.6), transparent)' }}>
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          <div className="fade-up">
-            <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-emerald mb-4">Data & Trust</div>
-            <h2 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.03em] leading-[1.05] text-white mb-5">
-              Data that moves<br />as fast as markets.
-            </h2>
-            <p className="text-[16px] text-soft leading-relaxed mb-8 max-w-lg">
-              StockX runs on institutional-grade data infrastructure — without ever touching your personal trading account or demat.
-            </p>
-            <div className="flex items-center gap-6 flex-wrap">
-              {['No broker integration', 'No portfolio tracking', 'Zero data retention'].map(item => (
-                <div key={item} className="flex items-center gap-2 text-soft text-[13px]">
-                  <CheckIcon className="w-4 h-4 text-emerald" />
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3">
-            {[
-              {
-                icon: <><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.657 4.03 3 9 3s9-1.343 9-3V5" /><path d="M3 12c0 1.657 4.03 3 9 3s9-1.343 9-3" /></>,
-                label: 'Historical Depth', title: '5 Years NSE Historical Data',
-                desc: 'Every tick, every session, every stock. Indexed for millisecond lookups.',
-              },
-              {
-                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />,
-                label: 'Latency', title: 'Live Market Tick Data',
-                desc: 'Sub-second NSE feed. What the engine sees is what\'s happening right now.',
-              },
-              {
-                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />,
-                label: 'Privacy', title: 'No Personal Trade Data Required',
-                desc: 'You never connect a broker. Your positions, PAN, and demat stay yours alone.',
-              },
-            ].map(({ icon, label, title, desc }) => (
-              <div key={label} className="flex items-center gap-6 p-6 rounded-2xl border border-line bg-card/40 fade-up">
-                <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-emerald/10 border border-emerald/20 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-emerald" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">{icon}</svg>
-                </div>
-                <div className="flex-1">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted mb-1">{label}</div>
-                  <div className="text-[22px] font-semibold text-white tracking-tight mb-1">{title}</div>
-                  <div className="text-[13px] text-soft">{desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* WITHOUT vs WITH */}
-      <section className="px-6 lg:px-10 py-24">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mb-16 fade-up">
-            <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-emerald mb-4">Real Scenario</div>
-            <h2 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.03em] leading-[1.05] text-white mb-5">
-              One manipulated trade.<br />
-              <span className="text-emerald">₹18,000 saved.</span>
-            </h2>
-            <p className="text-[16px] text-soft leading-relaxed">A real scenario using SUZLON during a coordinated pump cycle. See how StockX changes the outcome — before a single rupee is risked.</p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-5">
-            {/* Without */}
-            <div className="rounded-2xl border border-danger/20 overflow-hidden fade-up" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.04), transparent)' }}>
-              <div className="px-5 py-3 border-b border-danger/15 flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.06)' }}>
-                <svg className="w-4 h-4 text-danger" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-danger font-semibold">Without StockX</span>
-              </div>
-              <div className="divide-y divide-line/60">
-                {[
-                  ['Trigger', 'Telegram group sends "SUZLON breakout confirmed! Enter NOW at ₹45" with 12,000 forwards.'],
-                  ['Action', 'Trader buys 5,000 shares at ₹45. Entry based on sentiment, no technical check.'],
-                  ['Outcome (7 days later)', 'Stock retraces to ₹41.40 after pump collapses. Stop-loss triggered.'],
-                ].map(([label, text]) => (
-                  <div key={label} className="p-5">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted mb-2">{label}</div>
-                    <div className="text-[13.5px] text-soft leading-relaxed">{text}</div>
-                  </div>
-                ))}
-                <div className="p-5">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted mb-2">Loss</div>
-                  <div className="text-[28px] font-semibold tracking-[-0.03em] text-danger">−₹18,000</div>
-                  <div className="text-[12px] text-muted mt-1">On a single trade.</div>
-                </div>
-              </div>
-            </div>
-
-            {/* With */}
-            <div className="rounded-2xl border border-emerald/25 overflow-hidden glow-emerald fade-up" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.05), transparent)' }}>
-              <div className="px-5 py-3 border-b border-emerald/20 flex items-center gap-2" style={{ background: 'rgba(16,185,129,0.08)' }}>
-                <CheckIcon className="w-4 h-4 text-emerald" />
-                <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-emerald font-semibold">With StockX</span>
-              </div>
-              <div className="divide-y divide-line/60">
-                {[
-                  ['Trigger', 'Same Telegram tip received. Trader runs SUZLON through StockX before placing order.'],
-                  ['StockX flags', 'Score: 24/100. Manipulation risk 78%. FOMO flag active. Sentiment/Reality gap: hype vs. neutral. Risk Simulation: 67% drawdown probability.'],
-                  ['Action', 'Trader skips the trade. Waits for confirmation. Stock drops 8% over next 5 sessions.'],
-                ].map(([label, text]) => (
-                  <div key={label} className="p-5">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted mb-2">{label}</div>
-                    <div className="text-[13.5px] text-soft leading-relaxed">{text}</div>
-                  </div>
-                ))}
-                <div className="p-5">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted mb-2">Outcome</div>
-                  <div className="text-[28px] font-semibold tracking-[-0.03em] text-emerald">+₹18,000 saved</div>
-                  <div className="text-[12px] text-muted mt-1">Capital protected. Decision validated.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SEBI SAFE */}
-      <section className="px-6 lg:px-10 py-24">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-2xl mb-16 fade-up">
-            <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-emerald mb-4">Trust & Compliance</div>
-            <h2 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.03em] leading-[1.05] text-white mb-5">
-              SEBI-Safe <span className="text-muted">by design.</span>
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            {[
-              {
-                badge: 'No Investment Advice', title: 'Audit, not advice',
-                desc: "StockX never tells you what to buy or sell. It evaluates the quality of your own decision — a fundamentally different (and SEBI-safe) service.",
-              },
-              {
-                badge: 'Zero Personal Data', title: 'Ephemeral by default',
-                desc: "No portfolio, PAN, or account data is ever collected. Your trades are never tracked or stored. Every analysis is ephemeral.",
-              },
-              {
-                badge: 'Fully Disconnected', title: 'No broker access',
-                desc: "StockX operates entirely independently of your brokerage. No API keys, no demat access, no order placement — ever.",
-              },
-            ].map(({ badge, title, desc }) => (
-              <div key={title} className="p-6 rounded-2xl border border-line bg-card/40 fade-up">
-                <div className="inline-flex items-center gap-2 mb-4 px-2.5 py-1 rounded-md border border-emerald/25 bg-emerald/10">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald" />
-                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-emerald">{badge}</span>
-                </div>
-                <h4 className="text-[16px] font-semibold text-white mb-2">{title}</h4>
-                <p className="text-[13.5px] text-soft leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="px-6 lg:px-10 py-24 border-t border-line">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-12 fade-up">
-            <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-emerald mb-4">FAQ</div>
-            <h2 className="text-[36px] md:text-[44px] font-semibold tracking-[-0.03em] leading-[1.05] text-white">Common questions.</h2>
-          </div>
-          <div className="border-b border-line">
-            {FAQS.map(({ q, a }) => <FaqItem key={q} q={q} a={a} />)}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section id="try-free" className="relative px-6 lg:px-10 py-28 overflow-hidden">
-        <div className="absolute inset-0 grid-bg opacity-50" />
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-80 blur-3xl" style={{ background: 'linear-gradient(to right, transparent, rgba(16,185,129,0.08), transparent)' }} />
-        <div className="relative max-w-4xl mx-auto text-center fade-up">
-          <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-emerald mb-6">Try It Free</div>
-          <h2 className="text-[40px] md:text-[56px] font-semibold tracking-[-0.035em] leading-[1.05] text-white mb-6">
-            Stop guessing.<br />
-            <span className="text-emerald italic font-light">Start deciding.</span>
-          </h2>
-          <p className="text-[17px] text-soft leading-relaxed max-w-xl mx-auto mb-10">
-            Ask your first market question — the engine is live, the data is real, and your first 5 queries are on us.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
-            <a
-              href="#"
-              onClick={scrollToSearch}
-              className="group inline-flex items-center gap-3 px-7 py-4 rounded-xl bg-emerald text-ink font-semibold text-[15px] hover:bg-emerald/90 transition"
-            >
-              Start free — 5 queries on us
-              <svg className="w-4 h-4 group-hover:translate-x-0.5 transition" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </a>
-            <a href="#features" className="inline-flex items-center gap-2 text-soft hover:text-white text-[14px] transition">
-              See how the engine works →
-            </a>
-          </div>
-          <div className="flex items-center justify-center gap-6 flex-wrap">
-            {['No card required', 'No broker access', '5 full queries, free'].map(item => (
-              <div key={item} className="flex items-center gap-2 text-muted text-[12px] font-mono uppercase tracking-[0.08em]">
-                <CheckIcon className="w-3.5 h-3.5 text-emerald" />
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* FOOTER */}
       <footer className="px-6 lg:px-10 pt-20 pb-10 border-t border-line" style={{ background: '#050608' }}>
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-10 pb-10 border-b border-line">
+          <div className="grid md:grid-cols-3 gap-10 pb-10 border-b border-line">
             <div>
               <div className="flex items-baseline gap-2 mb-3">
                 <span className="text-[20px] font-semibold tracking-tight text-white">StockX</span>
                 <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted px-1.5 py-0.5 border border-line rounded">by Stoxify</span>
               </div>
               <p className="text-[13px] text-soft leading-relaxed max-w-xs">India's first AI-powered Decision Quality Engine for retail traders. Built to audit decisions, not make them.</p>
-            </div>
-            <div>
-              <h5 className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted mb-4">Product</h5>
-              <ul className="space-y-2.5 text-[13.5px]">
-                <li><a href="#features" className="text-soft hover:text-white transition">Features</a></li>
-                <li><a href="#methodology" className="text-soft hover:text-white transition">Methodology</a></li>
-                <li><a href="#try-free" className="text-soft hover:text-white transition">Try Free</a></li>
-              </ul>
             </div>
             <div>
               <h5 className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted mb-4">Company</h5>

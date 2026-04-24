@@ -132,11 +132,11 @@ function transformApiResult(data) {
   else if (riskScore <= 75) { color = 'warn'; emoji = '🟡' }
 
   const dims = [
-    { name: 'Signal Int.', score: Math.round(data.signal_intel.score), color: getColorForQualityScore(data.signal_intel.score), reason: data.signal_intel?.finding ?? '' },
-    { name: 'Risk Sim.', score: Math.round(data.monte_carlo?.target_prob ?? 50), color: getColorForQualityScore(data.monte_carlo?.target_prob ?? 50), reason: data.monte_carlo?.finding ?? '' },
-    { name: 'Manipulation', score: Math.round(100 - (data.pump_dump?.score ?? 50)), color: getColorForQualityScore(100 - (data.pump_dump?.score ?? 50)), reason: data.pump_dump?.finding ?? '' },
-    { name: 'Sentiment', score: Math.round(100 - Math.min(100, (data.sentiment_gap?.divergence ?? 30) * 1.3)), color: getColorForQualityScore(100 - Math.min(100, (data.sentiment_gap?.divergence ?? 30) * 1.3)), reason: data.sentiment_gap?.finding ?? '' },
-    { name: 'Behavioural', score: Math.round(100 - (data.behaviour?.score ?? 20)), color: getColorForQualityScore(100 - (data.behaviour?.score ?? 20)), reason: data.behaviour?.finding ?? '' },
+    { name: 'Signal Intel', score: Math.round(data.signal_intel.score), color: getColorForQualityScore(data.signal_intel.score), reason: data.signal_intel?.finding ?? '', setup_label: data.signal_intel?.setup_label, setup_color: data.signal_intel?.setup_color, model: data.signal_intel?.model, type: 'xgb' },
+    { name: 'Risk Simulation', score: Math.round(data.monte_carlo?.target_prob ?? 50), color: getColorForQualityScore(data.monte_carlo?.target_prob ?? 50), reason: data.monte_carlo?.finding ?? '', target_prob: data.monte_carlo?.target_prob, sl_prob: data.monte_carlo?.sl_prob, model: data.monte_carlo?.model, type: 'mc' },
+    { name: 'Pump & Dump', score: Math.round(100 - (data.pump_dump?.score ?? 50)), color: getColorForQualityScore(100 - (data.pump_dump?.score ?? 50)), reason: data.pump_dump?.finding ?? '', anomaly_label: data.pump_dump?.anomaly_label, anomaly_color: data.pump_dump?.anomaly_color, is_anomaly: data.pump_dump?.is_anomaly, model: data.pump_dump?.model, type: 'iso' },
+    { name: 'Market Sentiment', score: Math.round(100 - Math.min(100, (data.sentiment_gap?.divergence ?? 30) * 1.3)), color: getColorForQualityScore(100 - Math.min(100, (data.sentiment_gap?.divergence ?? 30) * 1.3)), reason: data.sentiment_gap?.finding ?? '', sentiment_score: data.sentiment_gap?.sentiment_score, divergence: data.sentiment_gap?.divergence, model: data.sentiment_gap?.model, type: 'sentiment' },
+    { name: 'Behavioural', score: Math.round(100 - (data.behaviour?.score ?? 20)), color: getColorForQualityScore(100 - (data.behaviour?.score ?? 20)), reason: data.behaviour?.finding ?? '', flags: data.behaviour?.flags, model: data.behaviour?.model, type: 'behaviour' },
   ]
 
   return {
@@ -150,8 +150,10 @@ function transformApiResult(data) {
     dims,
     price: data.tech_snapshot?.current_price ?? null,
     changePercent: data.tech_snapshot?.today_change_pct ?? null,
+    tech: data.tech_snapshot ?? {},
+    stockHoldings: data.stock_holdings ?? { institutions_pct: 0, promoters_pct: 0, public_pct: 0 },
     news: data.news ?? [],
-    fiiDii: data.fii_dii ?? [],
+    fiiDii: (data.fii_dii && data.fii_dii.length > 0) ? data.fii_dii : MOCK_FII_DII,
     isLive: true,
   }
 }
@@ -207,31 +209,212 @@ function useCountUp(target, trigger) {
   return val
 }
 
-// ─── Dimension mini card ───
-function DimCard({ dim }) {
+// ─── ML Layer Card ───
+const LABEL_COLORS = {
+  green:  { bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.3)', text: 'text-emerald' },
+  yellow: { bg: 'rgba(251,191,36,0.1)',  border: 'rgba(251,191,36,0.3)',  text: 'text-warn'   },
+  red:    { bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.3)',   text: 'text-danger'  },
+}
+
+const TYPE_TO_MODEL = {
+  'xgb': 'MACHINE LEARNING',
+  'mc': 'STATISTICAL',
+  'iso': 'ANOMALY ENGINE',
+  'sentiment': 'NLP MODEL',
+  'behaviour': 'RULE-BASED'
+}
+
+function MLCard({ dim }) {
   const c = COLOR_MAP[dim.color]
+  const type = dim.type
+  const engineLabel = TYPE_TO_MODEL[type] || 'ENGINE'
+
   return (
-    <div className="p-3 rounded-xl border border-line bg-white/[0.02] flex flex-col gap-2">
-      <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted">{dim.name}</div>
-      <div className="flex items-baseline gap-1">
-        <span className={`text-[20px] font-semibold tracking-[-0.03em] ${c.text}`}>{dim.score}</span>
-        <span className="font-mono text-[10px] text-muted">/100</span>
+    <div className="rounded-xl border border-line bg-white/[0.02] overflow-hidden flex flex-col h-full hover:bg-white/[0.03] transition-colors duration-300">
+      <div className="px-3 py-2.5 border-b border-line/40 flex flex-col gap-0.5">
+        <span className="font-mono text-[9px] uppercase tracking-wider text-soft/80 truncate">{dim.name}</span>
+        <span className="font-mono text-[7px] text-muted/40 uppercase tracking-widest truncate">{engineLabel}</span>
       </div>
-      <div className="h-1 rounded-full bg-line overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${dim.score}%`, background: c.hex }} />
+      
+      <div className="p-3 flex flex-col gap-3 flex-1">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-1">
+            <span className={`text-[28px] font-bold tracking-tight leading-none ${c.text}`}>{dim.score}</span>
+            <span className="font-mono text-[9px] text-muted">/100</span>
+          </div>
+          <div className="h-1 rounded-full bg-white/5 overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${dim.score}%`, background: c.hex }} />
+          </div>
+        </div>
+        
+        <div className="mt-1">
+          {type === 'xgb' && dim.setup_label && (() => {
+            const lc = LABEL_COLORS[dim.setup_color] || LABEL_COLORS.yellow
+            return (
+              <div className="rounded-lg px-2.5 py-2 flex items-center justify-center border" style={{ background: lc.bg, borderColor: lc.border }}>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full shadow-[0_0_6px_rgba(currentColor,0.5)]" style={{ background: lc.border }} />
+                  <span className={`font-mono text-[9.5px] font-bold tracking-wider uppercase text-center ${lc.text}`}>{dim.setup_label}</span>
+                </div>
+              </div>
+            )
+          })()}
+
+          {type === 'mc' && dim.target_prob != null && (
+            <div className="flex flex-col gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="rounded-lg py-2 bg-emerald/10 border border-emerald/20 flex flex-col items-center justify-center text-center">
+                  <span className="font-semibold text-emerald text-[16px] leading-none">{dim.target_prob?.toFixed(0)}%</span>
+                  <span className="font-mono text-[7px] text-emerald/70 mt-1 uppercase tracking-wider">Target</span>
+                </div>
+                <div className="rounded-lg py-2 bg-danger/10 border border-danger/20 flex flex-col items-center justify-center text-center">
+                  <span className="font-semibold text-danger text-[16px] leading-none">{dim.sl_prob?.toFixed(0)}%</span>
+                  <span className="font-mono text-[7px] text-danger/70 mt-1 uppercase tracking-wider">Stop Loss</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {type === 'iso' && dim.anomaly_label && (() => {
+            const lc = LABEL_COLORS[dim.anomaly_color] || LABEL_COLORS.yellow
+            return (
+              <div className="rounded-lg px-2.5 py-2 flex items-center justify-center border" style={{ background: lc.bg, borderColor: lc.border }}>
+                <div className="flex items-center gap-1.5">
+                  <svg className={`w-3.5 h-3.5 ${lc.text}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+                  </svg>
+                  <span className={`font-mono text-[9.5px] font-bold tracking-wider uppercase ${lc.text}`}>{dim.anomaly_label}</span>
+                </div>
+              </div>
+            )
+          })()}
+
+          {type === 'sentiment' && dim.sentiment_score != null && (
+            <div className="rounded-lg p-2.5 bg-white/[0.03] border border-white/5 flex flex-col gap-2">
+              <div className="flex items-end justify-between">
+                <div className="flex flex-col">
+                  <span className="font-mono text-[8px] uppercase tracking-wider text-muted mb-0.5">Sentiment</span>
+                  <span className="font-semibold text-[16px] text-white leading-none">{dim.sentiment_score?.toFixed(0)}</span>
+                </div>
+                {dim.divergence != null && (
+                  <div className="flex flex-col items-end">
+                    <span className="font-mono text-[8px] uppercase tracking-wider text-muted mb-0.5">Gap</span>
+                    <span className="font-mono text-[10px] text-warn font-medium">{dim.divergence?.toFixed(0)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="h-1 rounded-full bg-white/5 overflow-hidden w-full">
+                <div className="h-full rounded-full bg-gradient-to-r from-danger via-warn to-emerald" style={{ width: `${dim.sentiment_score}%` }} />
+              </div>
+            </div>
+          )}
+
+          {type === 'behaviour' && dim.flags && dim.flags.length > 0 && (
+            <div className="rounded-lg p-2.5 bg-white/[0.03] border border-white/5 flex flex-col gap-1.5">
+              {dim.flags.slice(0, 2).map((f, i) => {
+                const parts = f.split(':')
+                const title = parts[0]
+                const desc = parts.slice(1).join(':')
+                return (
+                  <div key={i} className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1 h-1 rounded-full bg-warn shadow-[0_0_4px_rgba(251,191,36,0.5)] flex-shrink-0" />
+                      <span className="font-mono text-[8.5px] font-bold text-warn tracking-widest uppercase truncate">{title}</span>
+                    </div>
+                    {desc && <span className="font-mono text-[8px] text-muted/90 leading-tight pl-2.5 line-clamp-2">{desc.trim()}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {dim.reason && (
+          <div className="mt-auto pt-3 border-t border-line/40">
+            <p className="text-[9.5px] text-muted/70 leading-relaxed font-sans line-clamp-4">{dim.reason}</p>
+          </div>
+        )}
       </div>
-      {dim.reason && (
-        <p className="text-[11px] text-muted leading-relaxed mt-0.5">{dim.reason}</p>
-      )}
     </div>
   )
 }
+
+function TechStatsStrip({ tech }) {
+  if (!tech || !tech.rsi) return null
+
+  const rsiColor = tech.rsi > 70 ? 'text-danger' : tech.rsi < 30 ? 'text-emerald' : 'text-warn'
+  const rsiLabel = tech.rsi > 70 ? 'Overbought' : tech.rsi < 30 ? 'Oversold' : 'Neutral'
+  const macdColor = tech.macd_hist > 0 ? 'text-emerald' : 'text-danger'
+  const macdLabel = tech.macd_hist > 0 ? 'Bullish' : 'Bearish'
+  const priceVsEma200 = tech.current_price > tech.ema200 ? 'text-emerald' : 'text-danger'
+  const priceVsEma50  = tech.current_price > tech.ema50  ? 'text-emerald' : 'text-danger'
+  const priceVsEma20  = tech.current_price > tech.ema20  ? 'text-emerald' : 'text-danger'
+  const bbPct = Math.round((tech.bb_pos ?? 0.5) * 100)
+  const w52Pct = tech.w52_high && tech.w52_low ? Math.round(((tech.current_price - tech.w52_low) / (tech.w52_high - tech.w52_low + 0.01)) * 100) : 50
+
+  const StatBox = ({ label, value, sub, valueClass = 'text-soft' }) => (
+    <div className="flex flex-col gap-1 px-4 py-3 border-r border-line/40 last:border-0">
+      <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted">{label}</span>
+      <span className={`font-semibold text-[15px] tracking-tight ${valueClass}`}>{value}</span>
+      {sub && <span className="font-mono text-[10px] text-muted/70">{sub}</span>}
+    </div>
+  )
+
+  return (
+    <div className="glass rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/[0.02]">
+        <div className="flex items-center gap-2">
+          <svg className="w-3.5 h-3.5 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-soft">Technical Indicators · Live Data</span>
+        </div>
+        <span className="font-mono text-[10px] text-muted">1D · NSE</span>
+      </div>
+
+      <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-y md:divide-y-0 divide-line/40">
+        <StatBox label="RSI (14)" value={tech.rsi?.toFixed(1)} sub={rsiLabel} valueClass={rsiColor} />
+        <StatBox label="MACD" value={tech.macd?.toFixed(2)} sub={`Signal ${tech.macd_signal?.toFixed(2)}`} valueClass={macdColor} />
+        <StatBox label="MACD Hist" value={tech.macd_hist?.toFixed(2)} sub={macdLabel} valueClass={macdColor} />
+        <StatBox label="Volume Ratio" value={`${tech.vol_ratio?.toFixed(2)}x`} sub={`Avg ${tech.vol_30d_avg ? (tech.vol_30d_avg/1e5).toFixed(1)+'L' : '—'}`} valueClass={tech.vol_ratio > 2 ? 'text-warn' : 'text-soft'} />
+        <StatBox label="ATR (14)" value={`₹${tech.atr?.toFixed(1)}`} sub={`${tech.atr_pct?.toFixed(2)}% daily`} />
+        <StatBox label="Momentum" value={`${tech.mom5 >= 0 ? '+' : ''}${tech.mom5?.toFixed(1)}%`} sub={`20d: ${tech.mom20 >= 0 ? '+' : ''}${tech.mom20?.toFixed(1)}%`} valueClass={tech.mom5 >= 0 ? 'text-emerald' : 'text-danger'} />
+      </div>
+
+      <div className="border-t border-line/40">
+        <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-y md:divide-y-0 divide-line/40">
+          <StatBox label="EMA 20" value={`₹${tech.ema20?.toFixed(1)}`} sub={tech.current_price > tech.ema20 ? '↑ Price above' : '↓ Price below'} valueClass={priceVsEma20} />
+          <StatBox label="EMA 50" value={`₹${tech.ema50?.toFixed(1)}`} sub={tech.current_price > tech.ema50 ? '↑ Price above' : '↓ Price below'} valueClass={priceVsEma50} />
+          <StatBox label="EMA 200" value={`₹${tech.ema200?.toFixed(1)}`} sub={tech.current_price > tech.ema200 ? '↑ Price above' : '↓ Price below'} valueClass={priceVsEma200} />
+          <StatBox label="BB Upper" value={`₹${tech.bb_upper?.toFixed(1)}`} sub="Resistance" />
+          <StatBox label="BB Lower" value={`₹${tech.bb_lower?.toFixed(1)}`} sub="Support" />
+          <StatBox label="BB Position" value={`${bbPct}%`} sub={bbPct > 80 ? 'Near upper band' : bbPct < 20 ? 'Near lower band' : 'Mid-band'} valueClass={bbPct > 80 ? 'text-danger' : bbPct < 20 ? 'text-emerald' : 'text-soft'} />
+        </div>
+      </div>
+
+      <div className="px-5 py-3 border-t border-line/40">
+        <div className="flex items-center gap-4">
+          <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted whitespace-nowrap">52-Week Range</span>
+          <span className="font-mono text-[11px] text-danger">₹{tech.w52_low?.toFixed(1)}</span>
+          <div className="flex-1 relative h-1.5 bg-line rounded-full overflow-hidden">
+            <div className="absolute h-full bg-gradient-to-r from-danger via-warn to-emerald rounded-full w-full opacity-30" />
+            <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-emerald shadow" style={{ left: `calc(${w52Pct}% - 6px)` }} />
+          </div>
+          <span className="font-mono text-[11px] text-emerald">₹{tech.w52_high?.toFixed(1)}</span>
+          <span className="font-mono text-[10px] text-muted">{w52Pct}% of range</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // ─── Helpers ───
 function formatPrice(p) {
   if (p == null) return '—'
   return '₹' + Number(p).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
 function timeAgo(iso) {
   if (!iso) return ''
   try {
@@ -246,7 +429,7 @@ function timeAgo(iso) {
 function NewsCard({ news }) {
   if (!news || news.length === 0) return null
   return (
-    <div className="glass rounded-2xl overflow-hidden">
+    <div className="glass rounded-2xl overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/[0.02]">
         <div className="flex items-center gap-2">
           <svg className="w-3.5 h-3.5 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -256,7 +439,7 @@ function NewsCard({ news }) {
         </div>
         <span className="font-mono text-[10px] text-muted">{news.length} articles</span>
       </div>
-      <div className="divide-y divide-line/50">
+      <div className="divide-y divide-line/50 flex-1 overflow-y-auto">
         {news.map((article, i) => (
           <a
             key={i}
@@ -271,8 +454,8 @@ function NewsCard({ news }) {
             <div className="flex-1 min-w-0">
               <p className="text-white text-[13px] leading-snug mb-1.5 group-hover:text-soft transition line-clamp-2">{article.title}</p>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[10px] text-emerald">{article.source}</span>
-                <span className="font-mono text-[10px] text-muted">{timeAgo(article.publishedAt)}</span>
+                <span className="font-mono text-[10px] text-emerald truncate">{article.source}</span>
+                <span className="font-mono text-[10px] text-muted flex-shrink-0">{timeAgo(article.publishedAt)}</span>
               </div>
             </div>
             {article.url && article.url !== '#' && (
@@ -303,7 +486,7 @@ function FiiDiiCard({ fiiDii }) {
   const barMax = Math.max(...fiiDii.flatMap(r => [Math.abs(r.fii_net ?? 0), Math.abs(r.dii_net ?? 0)]), 1)
 
   return (
-    <div className="glass rounded-2xl overflow-hidden">
+    <div className="glass rounded-2xl overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/[0.02]">
         <div className="flex items-center gap-2">
           <svg className="w-3.5 h-3.5 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -481,9 +664,9 @@ function ResultCard({ result, loading }) {
               </div>
             </div>
 
-            {/* Dimensions */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {result.dims.map(d => <DimCard key={d.name} dim={d} />)}
+            {/* Dimensions — ML Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              {result.dims.map(d => <MLCard key={d.name} dim={d} />)}
             </div>
           </>
         )}
@@ -617,7 +800,7 @@ export default function AnalysePage() {
       {/* NAV */}
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5" style={{ background: 'rgba(5,6,8,0.8)', backdropFilter: 'blur(20px)' }}>
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
-          <a href="/app" className="flex items-center gap-3">
+          <a href="/" className="flex items-center gap-3">
             <div className="flex items-baseline gap-2">
               <span className="text-[17px] font-semibold tracking-tight text-white">StockX</span>
               <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted px-1.5 py-0.5 border border-line rounded">by Stoxify</span>
@@ -733,10 +916,14 @@ export default function AnalysePage() {
         <div ref={resultCardRef} className="max-w-4xl mx-auto space-y-4">
           {result && <ResultCard result={result} loading={loading} />}
           {result && !loading && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <NewsCard news={result.news} />
-              <FiiDiiCard fiiDii={result.fiiDii} />
-            </div>
+            <>
+              <TechStatsStrip tech={result.tech} />
+              
+              <div className="grid md:grid-cols-2 gap-4">
+                <FiiDiiCard fiiDii={result.fiiDii} />
+                <NewsCard news={result.news} />
+              </div>
+            </>
           )}
         </div>
       </section>

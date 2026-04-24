@@ -9,9 +9,22 @@ import requests
 import os
 import joblib
 from dotenv import load_dotenv
+import random
+import asyncio
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
+
+# --- AI & NLP ---
+try:
+    from transformers import pipeline
+    print("Loading FinBERT pipeline (this may take a moment)...")
+    # Load globally to cache the model across requests
+    sentiment_pipeline = pipeline("sentiment-analysis", model="ProsusAI/finbert")
+    print("FinBERT loaded successfully.")
+except Exception as e:
+    print(f"Warning: Could not load FinBERT. {e}")
+    sentiment_pipeline = None
 
 load_dotenv()
 
@@ -156,7 +169,7 @@ def compute_technicals(df: pd.DataFrame) -> dict:
     high = df['High']
     low = df['Low']
 
-    # RSI
+    # RSI (Wilder's smoothing)
     delta = close.diff()
     gain = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
     loss = -delta.clip(upper=0).ewm(alpha=1/14, adjust=False).mean()
@@ -164,17 +177,19 @@ def compute_technicals(df: pd.DataFrame) -> dict:
     rsi = float((100 - (100 / (1 + rs))).iloc[-1])
 
     # MACD
-    ema12 = close.ewm(span=12).mean()
-    ema26 = close.ewm(span=26).mean()
-    macd = float((ema12 - ema26).iloc[-1])
-    signal_line = float((ema12 - ema26).ewm(span=9).mean().iloc[-1])
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    macd = float(macd_line.iloc[-1])
+    signal_line = float(macd_line.ewm(span=9, adjust=False).mean().iloc[-1])
     macd_hist = macd - signal_line
 
     # EMAs
-    ema20 = float(close.ewm(span=20).mean().iloc[-1])
-    ema50 = float(close.ewm(span=50).mean().iloc[-1])
-    ema200 = float(close.ewm(span=200, min_periods=50).mean().iloc[-1])
+    ema20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+    ema50 = float(close.ewm(span=50, adjust=False).mean().iloc[-1])
+    ema200 = float(close.ewm(span=200, min_periods=50, adjust=False).mean().iloc[-1])
     current_price = float(close.iloc[-1])
+    prev_close = float(close.iloc[-2]) if len(close) >= 2 else current_price
 
     # ATR
     tr = pd.concat([
@@ -191,10 +206,11 @@ def compute_technicals(df: pd.DataFrame) -> dict:
     vol_ratio = vol_today / (vol_30d_avg + 1)
 
     # Bollinger Bands
-    bb_mid = close.rolling(20).mean()
+    bb_mid_series = close.rolling(20).mean()
     bb_std = close.rolling(20).std()
-    bb_upper = float((bb_mid + 2 * bb_std).iloc[-1])
-    bb_lower = float((bb_mid - 2 * bb_std).iloc[-1])
+    bb_upper = float((bb_mid_series + 2 * bb_std).iloc[-1])
+    bb_lower = float((bb_mid_series - 2 * bb_std).iloc[-1])
+    bb_mid = float(bb_mid_series.iloc[-1])
     bb_pos = (current_price - bb_lower) / (bb_upper - bb_lower + 1e-10)
 
     # Price momentum
@@ -204,14 +220,21 @@ def compute_technicals(df: pd.DataFrame) -> dict:
     # Today's change
     today_change_pct = float((close.pct_change().iloc[-1]) * 100)
 
+    # 52-week high/low
+    w52_high = float(close.rolling(min(252, len(close))).max().iloc[-1])
+    w52_low  = float(close.rolling(min(252, len(close))).min().iloc[-1])
+
     return {
-        'rsi': rsi, 'macd': macd, 'macd_hist': macd_hist,
+        'rsi': rsi,
+        'macd': macd, 'macd_hist': macd_hist, 'macd_signal': signal_line,
         'ema20': ema20, 'ema50': ema50, 'ema200': ema200,
-        'current_price': current_price,
+        'current_price': current_price, 'prev_close': prev_close,
         'atr': atr, 'atr_pct': atr_pct,
         'vol_ratio': vol_ratio, 'vol_today': vol_today, 'vol_30d_avg': vol_30d_avg,
-        'bb_pos': bb_pos, 'mom5': mom5, 'mom20': mom20,
-        'today_change_pct': today_change_pct
+        'bb_upper': bb_upper, 'bb_lower': bb_lower, 'bb_mid': bb_mid, 'bb_pos': bb_pos,
+        'mom5': mom5, 'mom20': mom20,
+        'today_change_pct': today_change_pct,
+        'w52_high': w52_high, 'w52_low': w52_low,
     }
 
 
@@ -264,7 +287,7 @@ def layer_signal_intelligence(tech: dict) -> dict:
         tech['today_change_pct'],
     ]]
 
-    model_label = "XGBoost (trained)"
+    model_label = "Machine Learning (Setup Quality)"
     if _xgb_artifact is not None:
         try:
             xgb_model = _xgb_artifact['model']
@@ -274,7 +297,7 @@ def layer_signal_intelligence(tech: dict) -> dict:
         except Exception as e:
             print(f"XGBoost inference error: {e} — falling back to rules")
             score = _rule_based_signal_score(tech)
-            model_label = "Rule-based (XGBoost error fallback)"
+            model_label = "Rule-based (ML error fallback)"
     else:
         score = _rule_based_signal_score(tech)
         model_label = "Rule-based (no model loaded)"
@@ -287,7 +310,24 @@ def layer_signal_intelligence(tech: dict) -> dict:
         f"MACD {'positive' if tech['macd_hist'] > 0 else 'negative'}. "
         f"Volume {tech['vol_ratio']:.1f}x average."
     )
-    return {"score": score, "finding": finding, "model": model_label}
+    # Setup label for the card
+    if score >= 65:
+        setup_label = "STRONG SETUP"
+        setup_color = "green"
+    elif score >= 40:
+        setup_label = "NEUTRAL SETUP"
+        setup_color = "yellow"
+    else:
+        setup_label = "WEAK SETUP"
+        setup_color = "red"
+
+    return {
+        "score": score,
+        "setup_label": setup_label,
+        "setup_color": setup_color,
+        "finding": finding,
+        "model": model_label
+    }
 
 
 # ─────────────────────────────────────────────
@@ -350,28 +390,17 @@ def layer_monte_carlo(df: pd.DataFrame, tech: dict) -> dict:
     target_prob = round((hits_target / n_simulations) * 100, 1)
     sl_prob = round(100 - target_prob, 1)
 
-    # Kelly Criterion for position sizing
-    win_rate = target_prob / 100
-    loss_rate = sl_prob / 100
-    avg_win = 8  # % gain at target
-    avg_loss = 4  # % loss at SL
-    kelly_fraction = max(0, (win_rate * avg_win - loss_rate * avg_loss) / avg_win)
-    suggested_capital = min(kelly_fraction * 100000, 50000)  # Cap at 50K for retail
-    max_position = f"₹{suggested_capital:,.0f}"
-
     finding = (
         f"{target_prob}% probability of hitting +8% target before -4% stop loss "
         f"over 15 trading days. Daily volatility: {sigma*100:.1f}%. "
-        f"Kelly Criterion suggests max {kelly_fraction*100:.0f}% of capital."
     )
 
     return {
         "target_prob": target_prob,
         "sl_prob": sl_prob,
-        "max_position": max_position,
         "paths": paths_sample[:50],
         "finding": finding,
-        "model": "Monte Carlo (GBM, 10,000 simulations)"
+        "model": "Statistical Simulation"
     }
 
 
@@ -424,7 +453,7 @@ def layer_pump_dump(df: pd.DataFrame, tech: dict) -> dict:
         float(delivery_proxy_series.iloc[-1]),
     ]])
 
-    model_label = "Isolation Forest (pre-trained)"
+    model_label = "Anomaly Detection Engine"
     if _iso_artifact is not None:
         try:
             iso_model = _iso_artifact['model']
@@ -434,10 +463,10 @@ def layer_pump_dump(df: pd.DataFrame, tech: dict) -> dict:
         except Exception as e:
             print(f"Isolation Forest inference error: {e} — falling back to inline")
             normalized, is_anomaly = _inline_isolation_forest(df, tech)
-            model_label = "Isolation Forest (inline fallback)"
+            model_label = "Anomaly Detection Engine (inline fallback)"
     else:
         normalized, is_anomaly = _inline_isolation_forest(df, tech)
-        model_label = "Isolation Forest (inline — no pre-trained model)"
+        model_label = "Anomaly Detection Engine (inline — no pre-trained model)"
 
     vr = tech['vol_ratio']
     tc = tech['today_change_pct']
@@ -454,8 +483,22 @@ def layer_pump_dump(df: pd.DataFrame, tech: dict) -> dict:
         normalized = min(normalized, 35)
         finding = f"No significant anomalies detected. Volume {vr:.1f}x average — within normal range. Organic price action confirmed."
 
+    # Anomaly label for the card
+    if normalized >= 70:
+        anomaly_label = "MANIPULATION RISK"
+        anomaly_color = "red"
+    elif normalized >= 40:
+        anomaly_label = "UNUSUAL ACTIVITY"
+        anomaly_color = "yellow"
+    else:
+        anomaly_label = "ORGANIC ACTION"
+        anomaly_color = "green"
+
     return {
         "score": round(float(normalized), 1),
+        "is_anomaly": bool(is_anomaly),
+        "anomaly_label": anomaly_label,
+        "anomaly_color": anomaly_color,
         "finding": finding,
         "model": model_label
     }
@@ -490,6 +533,32 @@ def layer_sentiment_gap(symbol: str, tech: dict, signal_score: float) -> dict:
         except:
             pass
 
+    # Fallback: yfinance news if NewsAPI returned nothing
+    if not articles_data:
+        try:
+            t = yf.Ticker(f"{symbol}.NS")
+            yf_news = t.news or []
+            for item in yf_news[:5]:
+                content_ = item.get('content', {})
+                title = content_.get('title') or item.get('title', '')
+                if not title:
+                    continue
+                provider = content_.get('provider', {}).get('displayName', '') or item.get('publisher', '')
+                link = content_.get('canonicalUrl', {}).get('url', '') or item.get('link', '')
+                pub_time = content_.get('pubDate', '') or item.get('providerPublishTime', '')
+                if isinstance(pub_time, (int, float)):
+                    from datetime import datetime, timezone
+                    pub_time = datetime.fromtimestamp(pub_time, tz=timezone.utc).isoformat()
+                headlines_used.append(title)
+                articles_data.append({
+                    'title': title,
+                    'source': provider,
+                    'url': link,
+                    'publishedAt': str(pub_time),
+                })
+        except Exception as e:
+            print(f"yfinance news fallback failed: {e}")
+
     # Simple lexicon-based sentiment (fallback when FinBERT not available)
     positive_words = ['surge', 'gain', 'rally', 'growth', 'profit', 'strong', 'beat', 'rise',
                       'up', 'high', 'positive', 'bullish', 'record', 'best', 'exceed', 'outperform',
@@ -499,10 +568,32 @@ def layer_sentiment_gap(symbol: str, tech: dict, signal_score: float) -> dict:
                       'crash', 'plunge', 'cut', 'reduce', 'warning', 'probe', 'penalty']
 
     if headlines_used:
-        pos_count = sum(1 for h in headlines_used for w in positive_words if w.lower() in h.lower())
-        neg_count = sum(1 for h in headlines_used for w in negative_words if w.lower() in h.lower())
-        total = pos_count + neg_count + 1
-        sentiment_score = round((pos_count / total) * 100, 1)
+        if sentiment_pipeline:
+            # Batch process all headlines at once for maximum speed
+            try:
+                results = sentiment_pipeline(headlines_used)
+                pos_score = 0
+                neg_score = 0
+                for r in results:
+                    label = r['label'].lower()
+                    if label == 'positive': pos_score += r['score']
+                    elif label == 'negative': neg_score += r['score']
+                total = max(1, len(results))
+                sentiment_score = round(50 + ((pos_score - neg_score) / total) * 45, 1)
+                sentiment_score = max(10, min(95, sentiment_score))
+            except Exception as e:
+                print(f"FinBERT inference failed: {e}")
+                # Fallback to lexicon on inference failure
+                pos_count = sum(1 for h in headlines_used for w in positive_words if w.lower() in h.lower())
+                neg_count = sum(1 for h in headlines_used for w in negative_words if w.lower() in h.lower())
+                total = pos_count + neg_count + 1
+                sentiment_score = round((pos_count / total) * 100, 1)
+        else:
+            # Lexicon fallback
+            pos_count = sum(1 for h in headlines_used for w in positive_words if w.lower() in h.lower())
+            neg_count = sum(1 for h in headlines_used for w in negative_words if w.lower() in h.lower())
+            total = pos_count + neg_count + 1
+            sentiment_score = round((pos_count / total) * 100, 1)
     else:
         # Derive sentiment from technical momentum as proxy
         rsi = tech['rsi']
@@ -541,7 +632,7 @@ def layer_sentiment_gap(symbol: str, tech: dict, signal_score: float) -> dict:
         "divergence": divergence,
         "score": divergence,
         "finding": finding,
-        "model": "FinBERT + Lexicon Sentiment",
+        "model": "NLP Sentiment Engine",
         "news": articles_data,
     }
 
@@ -773,6 +864,23 @@ def fetch_fii_dii() -> list:
 # API ENDPOINTS
 # ─────────────────────────────────────────────
 
+
+def fetch_stock_holdings(symbol: str) -> dict:
+    try:
+        t = yf.Ticker(f"{symbol}.NS")
+        info = t.info
+        institutions = info.get('heldPercentInstitutions', 0)
+        insiders = info.get('heldPercentInsiders', 0)
+        
+        return {
+            "institutions_pct": float(institutions) * 100 if institutions else 0,
+            "promoters_pct": float(insiders) * 100 if insiders else 0,
+            "public_pct": max(0, 100 - (float(institutions) * 100 if institutions else 0) - (float(insiders) * 100 if insiders else 0))
+        }
+    except Exception as e:
+        print(f"Holding fetch failed: {e}")
+        return {"institutions_pct": 0, "promoters_pct": 0, "public_pct": 0}
+
 @app.get("/")
 def root():
     return {"status": "StockX API running", "version": "1.0.0", "layers": 5}
@@ -828,14 +936,32 @@ def analyse(req: AnalyseRequest):
         "behaviour": behaviour,
         "tech_snapshot": {
             "current_price": round(tech['current_price'], 2),
+            "prev_close": round(tech['prev_close'], 2),
             "rsi": round(tech['rsi'], 1),
+            "macd": round(tech['macd'], 4),
+            "macd_signal": round(tech['macd_signal'], 4),
+            "macd_hist": round(tech['macd_hist'], 4),
             "vol_ratio": round(tech['vol_ratio'], 2),
+            "vol_today": int(tech['vol_today']),
+            "vol_30d_avg": int(tech['vol_30d_avg']),
             "today_change_pct": round(tech['today_change_pct'], 2),
             "ema20": round(tech['ema20'], 2),
+            "ema50": round(tech['ema50'], 2),
             "ema200": round(tech['ema200'], 2),
+            "bb_upper": round(tech['bb_upper'], 2),
+            "bb_lower": round(tech['bb_lower'], 2),
+            "bb_mid": round(tech['bb_mid'], 2),
+            "bb_pos": round(tech['bb_pos'], 3),
+            "atr": round(tech['atr'], 2),
+            "atr_pct": round(tech['atr_pct'], 2),
+            "w52_high": round(tech['w52_high'], 2),
+            "w52_low": round(tech['w52_low'], 2),
+            "mom5": round(tech['mom5'], 2),
+            "mom20": round(tech['mom20'], 2),
         },
         "news": sentiment.get('news', []),
         "fii_dii": fii_dii,
+        "stock_holdings": fetch_stock_holdings(symbol),
     }
 
 
