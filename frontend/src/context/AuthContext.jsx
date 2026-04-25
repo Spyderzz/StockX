@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import {
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
 } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
@@ -33,16 +33,11 @@ export function AuthProvider({ children }) {
   }, [])
 
   const signInWithGoogle = async () => {
-    const result = await signInWithPopup(auth, googleProvider)
-    const fbUser = result.user
-    try {
-      const snap = await getDoc(doc(db, 'users', fbUser.uid))
-      if (snap.exists()) {
-        setUserProfile(snap.data())
-        return { needsProfile: false }
-      }
-    } catch {}
-    return { needsProfile: true }
+    // Use redirect instead of popup for mobile compatibility
+    await signInWithRedirect(auth, googleProvider)
+    // The browser will redirect, so code below won't run, 
+    // but we return a dummy to satisfy the frontend signature
+    return { needsProfile: false }
   }
 
   const signOut = () => firebaseSignOut(auth)
