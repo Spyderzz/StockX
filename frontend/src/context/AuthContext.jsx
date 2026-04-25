@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import {
   onAuthStateChanged,
+  signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
 } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
@@ -15,6 +17,11 @@ export function AuthProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
+    // Consume redirect result if we just returned from a redirect
+    getRedirectResult(auth).catch(err => {
+      console.error("Firebase Redirect Auth Error:", err)
+    })
+
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       setUser(fbUser)
       if (fbUser) {
@@ -33,11 +40,33 @@ export function AuthProvider({ children }) {
   }, [])
 
   const signInWithGoogle = async () => {
-    // Use redirect instead of popup for mobile compatibility
-    await signInWithRedirect(auth, googleProvider)
-    // The browser will redirect, so code below won't run, 
-    // but we return a dummy to satisfy the frontend signature
-    return { needsProfile: false }
+    try {
+      // Primary method: Popup (works seamlessly on desktop)
+      const result = await signInWithPopup(auth, googleProvider)
+      const fbUser = result.user
+      try {
+        const snap = await getDoc(doc(db, 'users', fbUser.uid))
+        if (snap.exists()) {
+          setUserProfile(snap.data())
+          return { needsProfile: false }
+        }
+      } catch {}
+      return { needsProfile: true }
+    } catch (err) {
+      // If popup is blocked or fails due to mobile restrictions, fallback to redirect
+      if (
+        err.code === 'auth/popup-blocked' ||
+        err.code === 'auth/popup-closed-by-user' ||
+        err.code === 'auth/cancelled-popup-request' ||
+        // Sometimes Safari drops cross-site cookies, so we redirect
+        err.code === 'auth/network-request-failed' ||
+        err.code === 'auth/internal-error'
+      ) {
+        await signInWithRedirect(auth, googleProvider)
+        return { needsProfile: false }
+      }
+      throw err
+    }
   }
 
   const signOut = () => firebaseSignOut(auth)
