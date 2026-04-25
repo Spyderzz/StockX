@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import NSE_STOCKS from '../config/nse_stocks.json'
@@ -700,11 +700,11 @@ function FaqItem({ q, a }) {
 export default function AnalysePage() {
   const { user, userProfile, authLoading, signOut } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
     if (!authLoading && !user) navigate('/login', { replace: true })
   }, [user, authLoading, navigate])
-
   
   const [inputVal, setInputVal] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -767,6 +767,18 @@ export default function AnalysePage() {
       setLoading(false)
     }
   }, [scrollToResult])
+
+  // Auto-search if parameter exists
+  useEffect(() => {
+    if (!authLoading && user) {
+      const initTicker = searchParams.get('ticker')
+      if (initTicker && !result && !loading && !inputVal) {
+        setInputVal(initTicker)
+        // Let's call runAnalysis slightly delayed to ensure state mounts
+        setTimeout(() => runAnalysis(initTicker), 100)
+      }
+    }
+  }, [searchParams, user, authLoading, result, loading, inputVal, runAnalysis])
 
   const handleSearch = useCallback(async (e) => {
     e.preventDefault()

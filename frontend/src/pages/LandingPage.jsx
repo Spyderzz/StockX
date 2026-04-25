@@ -547,34 +547,16 @@ export default function LandingPage() {
   const runAnalysis = useCallback(async (ticker) => {
     const sym = ticker.trim().toUpperCase()
     if (!sym) return
-
-    // Show mock immediately if available for instant feedback
-    if (MOCK_DATA[sym]) {
-      setResult(MOCK_DATA[sym])
-      setError('')
-    } else {
-      setResult(null)
+    
+    // If not logged in, force them to login before viewing results
+    if (!user) {
+      navigate('/login')
+      return
     }
-    scrollToResult()
 
-    // Then call the real API
-    setLoading(true)
-    setError('')
-    try {
-      const res = await axios.post(`${API_URL}/analyse`, { symbol: sym }, { timeout: 30000 })
-      setResult(transformApiResult(res.data))
-      scrollToResult()
-    } catch (err) {
-      if (MOCK_DATA[sym]) {
-        // Keep mock result, just show soft note
-      } else {
-        setError(`Could not analyse "${sym}". Try RELIANCE, HDFCBANK, INFY, TATASTEEL, or SUZLON.`)
-        setResult(MOCK_DATA.SUZLON)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [scrollToResult])
+    // If logged in, send them straight to the Analysis engine with their ticker
+    navigate(`/analyse?ticker=${sym}`)
+  }, [navigate, user])
 
   const handleSearch = useCallback(async (e) => {
     e.preventDefault()
@@ -667,6 +649,50 @@ export default function LandingPage() {
           <p className="max-w-2xl mx-auto text-[17px] md:text-[18px] text-soft leading-relaxed mb-12 fade-up">
             Ask about any NSE stock. Get institutional-grade risk analysis, technical validation, and a Decision Quality Score in seconds. No Bloomberg terminal required.
           </p>
+
+          {/* Search */}
+          <form onSubmit={handleSearch} className="relative max-w-3xl mx-auto fade-up mb-12">
+            <div className="relative flex items-center glass rounded-2xl glow-emerald transition-all focus-within:ring-2 focus-within:ring-emerald/40">
+              <svg className="w-5 h-5 text-muted ml-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={inputVal}
+                onChange={e => setInputVal(e.target.value.toUpperCase())}
+                placeholder="Ask about any stock (e.g., RELIANCE, HDFC)..."
+                autoComplete="off"
+                maxLength={20}
+                className="flex-1 bg-transparent text-white text-[16px] md:text-[17px] py-5 px-4 placeholder:text-muted font-mono"
+              />
+              <button
+                type="submit"
+                disabled={loading || !inputVal.trim()}
+                className="mr-2 w-11 h-11 rounded-xl bg-emerald text-ink flex items-center justify-center hover:bg-emerald/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading
+                  ? <div className="w-4 h-4 rounded-full border-2 border-ink border-t-transparent spinner" />
+                  : <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" /></svg>
+                }
+              </button>
+            </div>
+
+            {/* Preloaded suggestions */}
+            <div className="flex items-center justify-center flex-wrap gap-2 mt-5">
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted mr-2">Try:</span>
+              {['SUZLON', 'RELIANCE', 'TATASTEEL', 'HDFCBANK', 'INFY'].map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => handleTicker(t)}
+                  className="px-3 py-1 rounded-md border border-line bg-card/60 hover:bg-card hover:border-line2 font-mono text-[11px] text-soft transition"
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </form>
 
 
 
