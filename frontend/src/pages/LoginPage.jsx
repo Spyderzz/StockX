@@ -115,7 +115,7 @@ export default function LoginPage() {
       }
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {
-        setError('Sign-in failed. Please try again.')
+        setError(`Sign-in failed: ${err.message}`)
       }
     } finally {
       setSigningIn(false)
