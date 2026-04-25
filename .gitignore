@@ -1,9 +1,61 @@
+# --- General ---
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# --- Node / Frontend ---
 node_modules/
 dist/
-.env
+build/
+.npm
+.eslintcache
+
+# --- Python / Backend ---
 __pycache__/
-*.pyc
-.DS_Store
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
 *.egg-info/
-.venv/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Caching & API
+.cache/
+.pytest_cache/
