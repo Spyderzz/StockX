@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
+import AnimatedDemoCards from '../components/AnimatedDemoCards'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -733,7 +734,10 @@ export default function LandingPage() {
         </div>
       </header>
 
-
+      {/* Animated Demo Cards Section */}
+      <section className="relative px-6 lg:px-10 z-10 -mt-10 mb-20 fade-up pointer-events-none">
+        <AnimatedDemoCards />
+      </section>
 
       {/* NSE TICKER */}
       <div className="relative border-y border-line overflow-hidden py-3 mb-28" style={{ background: 'rgba(5,6,8,0.6)' }}>
