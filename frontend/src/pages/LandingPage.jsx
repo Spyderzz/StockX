@@ -668,55 +668,7 @@ export default function LandingPage() {
             Ask about any NSE stock. Get institutional-grade risk analysis, technical validation, and a Decision Quality Score in seconds. No Bloomberg terminal required.
           </p>
 
-          {/* Search */}
-          <form onSubmit={handleSearch} className="relative max-w-3xl mx-auto fade-up">
-            <div className="relative flex items-center glass rounded-2xl glow-emerald transition-all focus-within:ring-2 focus-within:ring-emerald/40">
-              <svg className="w-5 h-5 text-muted ml-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={inputVal}
-                onChange={e => setInputVal(e.target.value.toUpperCase())}
-                placeholder="Ask about any stock (e.g., RELIANCE, HDFC)..."
-                autoComplete="off"
-                maxLength={20}
-                className="flex-1 bg-transparent text-white text-[16px] md:text-[17px] py-5 px-4 placeholder:text-muted font-mono"
-              />
-              <button
-                type="submit"
-                disabled={loading || !inputVal.trim()}
-                className="mr-2 w-11 h-11 rounded-xl bg-emerald text-ink flex items-center justify-center hover:bg-emerald/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading
-                  ? <div className="w-4 h-4 rounded-full border-2 border-ink border-t-transparent spinner" />
-                  : <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" /></svg>
-                }
-              </button>
-            </div>
 
-            {/* Preloaded suggestions */}
-            <div className="flex items-center justify-center flex-wrap gap-2 mt-5">
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted mr-2">Try:</span>
-              {['SUZLON', 'RELIANCE', 'TATASTEEL', 'HDFCBANK', 'INFY'].map(t => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => handleTicker(t)}
-                  className="px-3 py-1 rounded-md border border-line bg-card/60 hover:bg-card hover:border-line2 font-mono text-[11px] text-soft transition"
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </form>
-
-          {error && (
-            <div className="mt-5 max-w-xl mx-auto p-3 rounded-xl bg-danger/10 border border-danger/25 text-danger font-mono text-[12px]">
-              {error}
-            </div>
-          )}
 
           {/* Trust badges */}
           <div className="flex items-center justify-center flex-wrap gap-3 md:gap-4 mt-12 fade-up">
@@ -755,37 +707,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* RESULT CARD */}
-      <section className="relative px-6 lg:px-10 -mt-8 mb-28">
-        {/* Trial mode banner */}
-        <div className="max-w-4xl mx-auto mb-3">
-          <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-warn/8 border border-warn/20">
-            <div className="flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-warn flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
-              </svg>
-              <span className="font-mono text-[11px] text-warn uppercase tracking-[0.1em]">Trial Mode · Demo data only</span>
-              <span className="hidden sm:inline font-mono text-[11px] text-muted">— Sign in for live NSE analysis with all 5 AI layers</span>
-            </div>
-            <button
-              onClick={handleAnalyseClick}
-              className="text-[11px] font-semibold text-emerald hover:text-emerald/80 transition whitespace-nowrap"
-            >
-              {user ? 'Go to Full Engine →' : 'Sign in free →'}
-            </button>
-          </div>
-        </div>
 
-        <div ref={resultCardRef} className="max-w-4xl mx-auto space-y-4">
-          {result && <ResultCard result={result} loading={loading} />}
-          {result && !loading && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <NewsCard news={result.news} />
-              <FiiDiiCard fiiDii={result.fiiDii} />
-            </div>
-          )}
-        </div>
-      </section>
 
       {/* NSE TICKER */}
       <div className="relative border-y border-line overflow-hidden py-3 mb-28" style={{ background: 'rgba(5,6,8,0.6)' }}>
