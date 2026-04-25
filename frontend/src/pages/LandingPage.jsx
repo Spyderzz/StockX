@@ -8,11 +8,11 @@ const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 // ─── Mock preloaded data (quality score: lower risk = higher display score) ───
 const MOCK_FII_DII = [
-  { date: '25-Apr-2026', fii_net:  2341.8, dii_net:  1204.5 },
-  { date: '24-Apr-2026', fii_net: -1876.3, dii_net:  2987.1 },
-  { date: '23-Apr-2026', fii_net:  3102.4, dii_net: -543.2  },
-  { date: '22-Apr-2026', fii_net: -892.7,  dii_net:  1765.8 },
-  { date: '17-Apr-2026', fii_net:  1543.2, dii_net:  876.3  },
+  { date: '25-Apr-2026', fii_net: 2341.8, dii_net: 1204.5 },
+  { date: '24-Apr-2026', fii_net: -1876.3, dii_net: 2987.1 },
+  { date: '23-Apr-2026', fii_net: 3102.4, dii_net: -543.2 },
+  { date: '22-Apr-2026', fii_net: -892.7, dii_net: 1765.8 },
+  { date: '17-Apr-2026', fii_net: 1543.2, dii_net: 876.3 },
 ]
 
 const MOCK_DATA = {
@@ -250,7 +250,7 @@ function NewsCard({ news }) {
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/[0.02]">
         <div className="flex items-center gap-2">
           <svg className="w-3.5 h-3.5 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 12h6m-6-4h6"/>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 12h6m-6-4h6" />
           </svg>
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-soft">Recent News</span>
         </div>
@@ -277,7 +277,7 @@ function NewsCard({ news }) {
             </div>
             {article.url && article.url !== '#' && (
               <svg className="w-3.5 h-3.5 text-muted flex-shrink-0 mt-1 group-hover:text-soft transition" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
             )}
           </a>
@@ -307,7 +307,7 @@ function FiiDiiCard({ fiiDii }) {
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/[0.02]">
         <div className="flex items-center gap-2">
           <svg className="w-3.5 h-3.5 text-soft" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
           </svg>
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-soft">FII / DII Activity · Market Context</span>
         </div>
@@ -548,7 +548,7 @@ export default function LandingPage() {
   const runAnalysis = useCallback(async (ticker) => {
     const sym = ticker.trim().toUpperCase()
     if (!sym) return
-    
+
     // If not logged in, force them to login before viewing results
     if (!user) {
       navigate('/login')
@@ -643,8 +643,8 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-[44px] md:text-[68px] lg:text-[76px] font-semibold tracking-[-0.035em] leading-[1.02] text-white mb-6 fade-up">
-            The analyst that<br />
-            <span className="text-white">never </span><span className="italic font-light text-emerald">sleeps.</span>
+            Analyse before you <span className="italic font-light text-emerald">buy.</span><br />
+            <span className="text-white">Think before you </span><span className="italic font-light text-danger">sell.</span>
           </h1>
 
           <p className="max-w-2xl mx-auto text-[17px] md:text-[18px] text-soft leading-relaxed mb-12 fade-up">
