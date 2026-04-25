@@ -133,18 +133,74 @@ const BASE_DIMS = [
   { name: 'BEHAVIOURAL', engine: 'CATBOOST MODEL', type: 'behaviour', score: 100, setupLabel: 'CLEAN ENTRY', setupColor: 'green' },
 ]
 
+const DEMO_TARGETS = [
+  {
+    ticker: 'ADANIENT',
+    basePrice: 2281.60,
+    basePct: -0.17,
+    verdict: 'PROCEED WITH CAUTION',
+    regime: 'SIDEWAYS',
+    baseScore: 60,
+    explain: "ADANIENT shows a bullish bias despite sideways market regime due to strong technicals and sentiment gap. — ADANIENT is trading above its EMA200, and the signal from XGBoost is dynamically outperforming. Given the positive sentiment gap, this can be seen as an under-appreciated opportunity."
+  },
+  {
+    ticker: 'HDFCBANK',
+    basePrice: 1623.40,
+    basePct: 1.24,
+    verdict: 'STRONG SETUP',
+    regime: 'BULL MARKET',
+    baseScore: 82,
+    explain: "High-quality decision setup. Strong trend structure with volume backing. 81% probability of positive outcome over 10 sessions. No manipulation, no FOMO — clean entry signal. Sentiment closely matches technicals."
+  },
+  {
+    ticker: 'SUZLON',
+    basePrice: 45.20,
+    basePct: -3.42,
+    verdict: 'HIGH RISK ENTRY',
+    regime: 'BEAR MARKET',
+    baseScore: 24,
+    explain: "Volume anomaly detected. Price diverging from institutional sentiment. High probability of a distribution trap. 67% of simulations hit stop-loss before target. Proceed with extreme caution."
+  },
+  {
+    ticker: 'RELIANCE',
+    basePrice: 2847.50,
+    basePct: 0.85,
+    verdict: 'QUALITY SETUP',
+    regime: 'BULL MARKET',
+    baseScore: 71,
+    explain: "Strong institutional-grade setup. 73% probability of positive outcome over 10 sessions. No manipulation flags. Volume organically outperforming. Sentiment aligns perfectly with fundamentals."
+  }
+]
+
 export default function AnimatedDemoCards() {
+  const [targetIdx, setTargetIdx] = useState(0)
+  const currentTarget = DEMO_TARGETS[targetIdx]
+
   const [dims, setDims] = useState(BASE_DIMS)
+  const [verdictScore, setVerdictScore] = useState(currentTarget.baseScore)
+  const [livePrice, setLivePrice] = useState(currentTarget.basePrice)
+  const [livePct, setLivePct] = useState(currentTarget.basePct)
 
-  const [verdictScore, setVerdictScore] = useState(60)
+  // Rotate stock every 6 seconds
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setTargetIdx(prev => {
+        const next = (prev + 1) % DEMO_TARGETS.length
+        setVerdictScore(DEMO_TARGETS[next].baseScore)
+        setLivePrice(DEMO_TARGETS[next].basePrice)
+        setLivePct(DEMO_TARGETS[next].basePct)
+        return next
+      })
+    }, 6000)
+    return () => clearInterval(iv)
+  }, [])
 
-  // Randomize values every 1.5 seconds to simulate live processing without drifting too far
+  // Randomize numbers every 1.2 seconds to simulate live processing
   useEffect(() => {
     const interval = setInterval(() => {
       setDims(prev => prev.map((d, i) => {
         const base = BASE_DIMS[i]
         
-        // Random walk, but pulled towards the base
         let diff = (Math.random() - 0.5) * 12
         if (d.score > base.score + 10) diff -= 4
         if (d.score < base.score - 10) diff += 4
@@ -172,15 +228,26 @@ export default function AnimatedDemoCards() {
       }))
       
       setVerdictScore(prev => {
+        const base = DEMO_TARGETS[targetIdx].baseScore
         let vDiff = (Math.random() - 0.5) * 8
-        if (prev > 68) vDiff -= 3
-        if (prev < 52) vDiff += 3
+        if (prev > base + 8) vDiff -= 3
+        if (prev < base - 8) vDiff += 3
         return Math.max(0, Math.min(100, prev + vDiff))
+      })
+
+      setLivePrice(prev => {
+        const diff = (Math.random() - 0.5) * (DEMO_TARGETS[targetIdx].basePrice * 0.001) // 0.1% volatility
+        return Math.max(0, prev + diff)
+      })
+
+      setLivePct(prev => {
+        const diff = (Math.random() - 0.5) * 0.1
+        return prev + diff
       })
     }, 1200)
     
     return () => clearInterval(interval)
-  }, [])
+  }, [targetIdx])
 
   const c = COLOR_MAP[getColor(verdictScore)]
 
@@ -208,8 +275,8 @@ export default function AnimatedDemoCards() {
           {/* Query */}
           <div className="flex items-start gap-3 mb-5">
             <span className="font-mono text-[11px] mt-1 text-muted">Query ›</span>
-            <p className="text-soft text-[15px] leading-relaxed">
-              What's the risk profile for <span className="text-white font-medium">ADANIENT</span> right now?
+            <p className="text-soft text-[15px] leading-relaxed transition-all duration-300">
+              What's the risk profile for <span className="text-white font-medium">{currentTarget.ticker}</span> right now?
             </p>
           </div>
           <div className="h-px bg-gradient-to-r from-transparent via-line to-transparent mb-6" />
@@ -226,8 +293,8 @@ export default function AnimatedDemoCards() {
                 <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted mb-1">StockX Verdict</div>
                 <div className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full transition-colors duration-500`} style={{ background: c.hex, boxShadow: `0 0 10px ${c.hex}` }} />
-                  <h2 className="text-[20px] md:text-[24px] font-semibold text-white tracking-tight leading-none uppercase">
-                    PROCEED WITH CAUTION
+                  <h2 className="text-[20px] md:text-[24px] font-semibold text-white tracking-tight leading-none uppercase transition-all duration-300">
+                    {currentTarget.verdict}
                   </h2>
                 </div>
               </div>
@@ -246,14 +313,14 @@ export default function AnimatedDemoCards() {
 
           <div className="flex items-center flex-wrap gap-3 mb-6">
             <div className="px-3 py-2 rounded-xl border border-line bg-white/[0.02] flex items-center gap-2">
-              <span className="text-white font-semibold text-[14px]">₹2,281.60</span>
+              <span className="text-white font-semibold text-[14px] transition-all duration-300">₹{livePrice.toFixed(2)}</span>
               <span className="font-mono text-[10px] text-muted/50">NSE</span>
             </div>
-            <div className="px-3 py-2 rounded-xl border border-danger/30 bg-danger/10 text-danger font-mono text-[11px] font-bold tracking-wider">
-              -0.17% today
+            <div className={`px-3 py-2 rounded-xl border font-mono text-[11px] font-bold tracking-wider transition-colors duration-500 ${livePct >= 0 ? 'border-emerald/30 bg-emerald/10 text-emerald' : 'border-danger/30 bg-danger/10 text-danger'}`}>
+              {livePct > 0 ? '+' : ''}{livePct.toFixed(2)}% today
             </div>
-            <div className="px-3 py-2 rounded-xl border border-warn/30 bg-warn/10 text-warn font-mono text-[11px] font-bold uppercase tracking-widest">
-              → SIDEWAYS
+            <div className={`px-3 py-2 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-widest transition-colors duration-500 ${currentTarget.regime === 'BULL MARKET' ? 'border-emerald/30 bg-emerald/10 text-emerald' : currentTarget.regime === 'BEAR MARKET' ? 'border-danger/30 bg-danger/10 text-danger' : 'border-warn/30 bg-warn/10 text-warn'}`}>
+              {currentTarget.regime === 'BULL MARKET' ? '↑ BULL MARKET' : currentTarget.regime === 'BEAR MARKET' ? '↓ BEAR MARKET' : '→ SIDEWAYS'}
             </div>
             <span className="font-mono text-[10px] text-muted/50 uppercase tracking-widest">Market price</span>
           </div>
@@ -273,8 +340,8 @@ export default function AnimatedDemoCards() {
               </div>
               <div className="flex-1">
                 <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-emerald mb-2">StockX Analysis</div>
-                <p className="text-soft text-[14px] leading-relaxed">
-                  ADANIENT shows a bullish bias despite sideways market regime due to strong technicals and sentiment gap. — ADANIENT is trading above its EMA200 at ₹2261.0, and the signal from XGBoost is dynamically outperforming. While the risk analysis suggests a low probability of hitting a +8% target while avoiding a -4% stop loss, this can be seen as an under-appreciated opportunity, given the positive sentiment gap between technical indicators and market sentiment.
+                <p className="text-soft text-[14px] leading-relaxed transition-all duration-500 min-h-[4rem]">
+                  {currentTarget.explain}
                 </p>
               </div>
             </div>
