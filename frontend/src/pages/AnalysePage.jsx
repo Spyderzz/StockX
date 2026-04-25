@@ -136,7 +136,7 @@ function transformApiResult(data) {
     { name: 'Risk Simulation', score: Math.round(data.monte_carlo?.target_prob ?? 50), color: getColorForQualityScore(data.monte_carlo?.target_prob ?? 50), reason: data.monte_carlo?.finding ?? '', target_prob: data.monte_carlo?.target_prob, sl_prob: data.monte_carlo?.sl_prob, model: data.monte_carlo?.model, type: 'mc' },
     { name: 'Pump & Dump', score: Math.round(100 - (data.pump_dump?.score ?? 50)), color: getColorForQualityScore(100 - (data.pump_dump?.score ?? 50)), reason: data.pump_dump?.finding ?? '', anomaly_label: data.pump_dump?.anomaly_label, anomaly_color: data.pump_dump?.anomaly_color, is_anomaly: data.pump_dump?.is_anomaly, model: data.pump_dump?.model, type: 'iso' },
     { name: 'Market Sentiment', score: Math.round(100 - Math.min(100, (data.sentiment_gap?.divergence ?? 30) * 1.3)), color: getColorForQualityScore(100 - Math.min(100, (data.sentiment_gap?.divergence ?? 30) * 1.3)), reason: data.sentiment_gap?.finding ?? '', sentiment_score: data.sentiment_gap?.sentiment_score, divergence: data.sentiment_gap?.divergence, model: data.sentiment_gap?.model, type: 'sentiment' },
-    { name: 'Behavioural', score: Math.round(100 - (data.behaviour?.score ?? 20)), color: getColorForQualityScore(100 - (data.behaviour?.score ?? 20)), reason: data.behaviour?.finding ?? '', flags: data.behaviour?.flags, model: data.behaviour?.model, type: 'behaviour' },
+    { name: 'Behavioural', score: Math.round(100 - (data.behaviour?.score ?? 20)), color: getColorForQualityScore(100 - (data.behaviour?.score ?? 20)), reason: data.behaviour?.finding ?? '', risk_label: data.behaviour?.risk_label, risk_color: data.behaviour?.risk_color, model: data.behaviour?.model, type: 'behaviour' },
   ]
 
   return {
@@ -148,6 +148,7 @@ function transformApiResult(data) {
     fullName: data.full_name,
     explain: [data.one_liner, data.explanation].filter(Boolean).join(' — '),
     dims,
+    regime: data.regime ?? null,
     price: data.tech_snapshot?.current_price ?? null,
     changePercent: data.tech_snapshot?.today_change_pct ?? null,
     tech: data.tech_snapshot ?? {},
@@ -221,7 +222,7 @@ const TYPE_TO_MODEL = {
   'mc': 'STATISTICAL',
   'iso': 'ANOMALY ENGINE',
   'sentiment': 'NLP MODEL',
-  'behaviour': 'RULE-BASED'
+  'behaviour': 'CATBOOST MODEL'
 }
 
 function MLCard({ dim }) {
@@ -309,22 +310,13 @@ function MLCard({ dim }) {
             </div>
           )}
 
-          {type === 'behaviour' && dim.flags && dim.flags.length > 0 && (
-            <div className="rounded-lg p-2.5 bg-white/[0.03] border border-white/5 flex flex-col gap-1.5">
-              {dim.flags.slice(0, 2).map((f, i) => {
-                const parts = f.split(':')
-                const title = parts[0]
-                const desc = parts.slice(1).join(':')
-                return (
-                  <div key={i} className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-1 h-1 rounded-full bg-warn shadow-[0_0_4px_rgba(251,191,36,0.5)] flex-shrink-0" />
-                      <span className="font-mono text-[8.5px] font-bold text-warn tracking-widest uppercase truncate">{title}</span>
-                    </div>
-                    {desc && <span className="font-mono text-[8px] text-muted/90 leading-tight pl-2.5 line-clamp-2">{desc.trim()}</span>}
-                  </div>
-                )
-              })}
+          {type === 'behaviour' && dim.risk_label && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`px-2 py-0.5 rounded-full font-mono text-[8px] font-bold uppercase tracking-widest border ${
+                dim.risk_color === 'red' ? 'bg-danger/15 border-danger/30 text-danger' :
+                dim.risk_color === 'yellow' ? 'bg-warn/15 border-warn/30 text-warn' :
+                'bg-emerald/15 border-emerald/30 text-emerald'
+              }`}>{dim.risk_label}</span>
             </div>
           )}
         </div>
@@ -349,7 +341,6 @@ function TechStatsStrip({ tech }) {
   const priceVsEma200 = tech.current_price > tech.ema200 ? 'text-emerald' : 'text-danger'
   const priceVsEma50  = tech.current_price > tech.ema50  ? 'text-emerald' : 'text-danger'
   const priceVsEma20  = tech.current_price > tech.ema20  ? 'text-emerald' : 'text-danger'
-  const bbPct = Math.round((tech.bb_pos ?? 0.5) * 100)
   const w52Pct = tech.w52_high && tech.w52_low ? Math.round(((tech.current_price - tech.w52_low) / (tech.w52_high - tech.w52_low + 0.01)) * 100) : 50
 
   const StatBox = ({ label, value, sub, valueClass = 'text-soft' }) => (
@@ -378,7 +369,7 @@ function TechStatsStrip({ tech }) {
         <StatBox label="MACD Hist" value={tech.macd_hist?.toFixed(2)} sub={macdLabel} valueClass={macdColor} />
         <StatBox label="Volume Ratio" value={`${tech.vol_ratio?.toFixed(2)}x`} sub={`Avg ${tech.vol_30d_avg ? (tech.vol_30d_avg/1e5).toFixed(1)+'L' : '—'}`} valueClass={tech.vol_ratio > 2 ? 'text-warn' : 'text-soft'} />
         <StatBox label="ATR (14)" value={`₹${tech.atr?.toFixed(1)}`} sub={`${tech.atr_pct?.toFixed(2)}% daily`} />
-        <StatBox label="Momentum" value={`${tech.mom5 >= 0 ? '+' : ''}${tech.mom5?.toFixed(1)}%`} sub={`20d: ${tech.mom20 >= 0 ? '+' : ''}${tech.mom20?.toFixed(1)}%`} valueClass={tech.mom5 >= 0 ? 'text-emerald' : 'text-danger'} />
+        <StatBox label="India VIX" value={tech.vix?.toFixed(2) ?? '—'} sub={tech.vix_spike ? '⚡ Spike' : tech.vix_change != null ? `${tech.vix_change >= 0 ? '+' : ''}${tech.vix_change?.toFixed(2)} chg` : ''} valueClass={tech.vix > 20 ? 'text-danger' : tech.vix > 15 ? 'text-warn' : 'text-emerald'} />
       </div>
 
       <div className="border-t border-line/40">
@@ -388,7 +379,7 @@ function TechStatsStrip({ tech }) {
           <StatBox label="EMA 200" value={`₹${tech.ema200?.toFixed(1)}`} sub={tech.current_price > tech.ema200 ? '↑ Price above' : '↓ Price below'} valueClass={priceVsEma200} />
           <StatBox label="BB Upper" value={`₹${tech.bb_upper?.toFixed(1)}`} sub="Resistance" />
           <StatBox label="BB Lower" value={`₹${tech.bb_lower?.toFixed(1)}`} sub="Support" />
-          <StatBox label="BB Position" value={`${bbPct}%`} sub={bbPct > 80 ? 'Near upper band' : bbPct < 20 ? 'Near lower band' : 'Mid-band'} valueClass={bbPct > 80 ? 'text-danger' : bbPct < 20 ? 'text-emerald' : 'text-soft'} />
+          <StatBox label="Momentum" value={`${tech.mom5 >= 0 ? '+' : ''}${tech.mom5?.toFixed(1)}%`} sub={`20d: ${tech.mom20 >= 0 ? '+' : ''}${tech.mom20?.toFixed(1)}%`} valueClass={tech.mom5 >= 0 ? 'text-emerald' : 'text-danger'} />
         </div>
       </div>
 
@@ -638,6 +629,15 @@ function ResultCard({ result, loading }) {
                       <path strokeLinecap="round" strokeLinejoin="round" d={result.changePercent >= 0 ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
                     </svg>
                     {result.changePercent >= 0 ? '+' : ''}{result.changePercent.toFixed(2)}% today
+                  </div>
+                )}
+                {result.regime != null && (
+                  <div className={`px-3 py-2 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-widest ${
+                    result.regime === 0 ? 'border-emerald/30 bg-emerald/10 text-emerald' :
+                    result.regime === 1 ? 'border-danger/30 bg-danger/10 text-danger' :
+                    'border-warn/30 bg-warn/10 text-warn'
+                  }`}>
+                    {result.regime === 0 ? '↑ Bull Market' : result.regime === 1 ? '↓ Bear Market' : '→ Sideways'}
                   </div>
                 )}
                 <span className="font-mono text-[10px] text-muted/50 uppercase tracking-widest">Market price</span>
