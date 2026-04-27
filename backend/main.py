@@ -429,8 +429,13 @@ def layer_monte_carlo(df: pd.DataFrame, tech: dict) -> dict:
                 'outcome': hit or ('target' if prices[-1] >= target else 'sl'),
             })
 
-    target_prob = round(hits_target / n_sims * 100, 1)
-    sl_prob     = round(100 - target_prob, 1)
+    total_hits = hits_target + hits_sl
+    if total_hits > 0:
+        target_prob = round(hits_target / total_hits * 100, 1)
+        sl_prob     = round(hits_sl / total_hits * 100, 1)
+    else:
+        target_prob = 50.0
+        sl_prob     = 50.0
 
     return {
         "target_prob": target_prob,
